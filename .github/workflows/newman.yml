@@ -1,0 +1,56 @@
+name: Newman CI
+
+on:
+  push:
+    branches: ["main", "master"]
+  pull_request:
+    branches: ["main", "master"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  newman:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repositório
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Instalar dependências
+        run: npm install
+
+      - name: Iniciar API em background
+        run: |
+          node src/index.js &
+          echo "API_PID=$!" >> $GITHUB_ENV
+        env:
+          PORT: 3000
+          JWT_SECRET: postman-lab-secret-2024
+
+      - name: Aguardar API ficar disponível
+        run: |
+          echo "Aguardando API em http://localhost:3000/health ..."
+          for i in $(seq 1 15); do
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:3000/health || true)
+            if [ "$STATUS" = "200" ]; then
+              echo "API disponível após ${i}s"
+              break
+            fi
+            echo "Tentativa $i — status $STATUS — aguardando 1s..."
+            sleep 1
+          done
+
+      - name: Executar coleção Newman
+        run: npm run test:postman
+
+      - name: Encerrar API
+        if: always()
+        run: kill "$API_PID" || true

@@ -1,0 +1,913 @@
+{
+  "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "name": "postman-lab",
+  "info": {
+    "_postman_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+    "name": "postman-lab",
+    "description": "Laboratório completo para aprender Postman do zero. Inclui cenários de Auth, CRUD com validação, Rate Limit, Timeout e erros de servidor.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Pre-request script de nível de coleção: injeta X-Request-Id em todas as requisições",
+          "pm.request.headers.add({",
+          "    key: 'X-Request-Id',",
+          "    value: pm.variables.replaceIn('{{$guid}}')",
+          "});"
+        ]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Testa presença do header X-Request-Id em TODAS as respostas",
+          "pm.test('X-Request-Id presente no response', function () {",
+          "    pm.expect(pm.response.headers.get('X-Request-Id')).to.not.be.undefined;",
+          "});"
+        ]
+      }
+    }
+  ],
+  "item": [
+    {
+      "name": "01 - Health",
+      "item": [
+        {
+          "name": "GET /health",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/health",
+              "host": ["{{baseUrl}}"],
+              "path": ["health"]
+            },
+            "description": "Verifica se a API está no ar. Deve retornar 200 com status 'ok'."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Content-Type é JSON', function () {",
+                  "    pm.expect(pm.response.headers.get('Content-Type')).to.include('application/json');",
+                  "});",
+                  "",
+                  "pm.test('Body tem status ok', function () {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.status).to.equal('ok');",
+                  "    pm.expect(body.uptime).to.be.a('number');",
+                  "    pm.expect(body.timestamp).to.be.a('string');",
+                  "});",
+                  "",
+                  "pm.test('Tempo de resposta menor que 1000ms', function () {",
+                  "    pm.expect(pm.response.responseTime).to.be.below(1000);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "02 - Auth",
+      "item": [
+        {
+          "name": "POST /auth/login — sucesso",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"username\": \"admin\",\n    \"password\": \"password123\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "login"]
+            },
+            "description": "Login com credenciais válidas. Salva o token na variável de ambiente 'token'."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response tem token e expiresIn', function () {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.token).to.be.a('string').and.not.empty;",
+                  "    pm.expect(body.tokenType).to.equal('Bearer');",
+                  "    pm.expect(body.expiresIn).to.be.a('number');",
+                  "    pm.expect(body.expiresAt).to.be.a('string');",
+                  "});",
+                  "",
+                  "// Salva o token para usar nas próximas requisições",
+                  "const body = pm.response.json();",
+                  "if (body.token) {",
+                  "    pm.environment.set('token', body.token);",
+                  "    console.log('Token salvo na variável de ambiente: token');",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST /auth/login — credenciais inválidas (401)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"username\": \"admin\",\n    \"password\": \"senha_errada\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "login"]
+            },
+            "description": "EXERCÍCIO: Tenta login com senha errada. Deve retornar 401."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 401 para credenciais inválidas', function () {",
+                  "    pm.response.to.have.status(401);",
+                  "});",
+                  "",
+                  "pm.test('Body tem error e message', function () {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.error).to.equal('Unauthorized');",
+                  "    pm.expect(body.message).to.be.a('string');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST /auth/login — payload incompleto (400)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"username\": \"admin\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "login"]
+            },
+            "description": "EXERCÍCIO: Envia payload sem 'password'. Deve retornar 400 BadRequest."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 400 para payload incompleto', function () {",
+                  "    pm.response.to.have.status(400);",
+                  "});",
+                  "",
+                  "pm.test('Body tem error BadRequest', function () {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.error).to.equal('BadRequest');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "03 - Items (CRUD)",
+      "item": [
+        {
+          "name": "POST /items — criar item",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"name\": \"Teclado Mecânico\",\n    \"description\": \"Switch Cherry MX Red, RGB, ABNT2\",\n    \"price\": 499.90,\n    \"category\": \"periféricos\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/items",
+              "host": ["{{baseUrl}}"],
+              "path": ["items"]
+            },
+            "description": "Cria um novo item. Salva o 'id' na variável de ambiente 'itemId'."
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Verifica se temos token antes de enviar",
+                  "if (!pm.environment.get('token')) {",
+                  "    console.warn('Variável token não encontrada. Execute POST /auth/login primeiro.');",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 201 Created', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "pm.test('Body tem id, name, price e timestamps', function () {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.id).to.be.a('number');",
+                  "    pm.expect(body.name).to.be.a('string');",
+                  "    pm.expect(body.price).to.be.a('number');",
+                  "    pm.expect(body.createdAt).to.be.a('string');",
+                  "    pm.expect(body.version).to.equal(1);",
+                  "});",
+                  "",
+                  "// Salva o id para usar nas próximas requisições",
+                  "const body = pm.response.json();",
+                  "if (body.id) {",
+                  "    pm.environment.set('itemId', body.id);",
+                  "    console.log('itemId salvo: ' + body.id);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST /items — payload inválido (422)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"description\": \"Faltou o name e price obrigatórios\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/items",
+              "host": ["{{baseUrl}}"],
+              "path": ["items"]
+            },
+            "description": "EXERCÍCIO: Envia payload sem 'name' e 'price'. Deve retornar 422 com lista de erros de validação."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 422 Unprocessable Entity', function () {",
+                  "    pm.response.to.have.status(422);",
+                  "});",
+                  "",
+                  "pm.test('Body tem error UnprocessableEntity e details', function () {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.error).to.equal('UnprocessableEntity');",
+                  "    pm.expect(body.details).to.be.an('array').and.have.length.above(0);",
+                  "});",
+                  "",
+                  "pm.test('Details contém erros para name e price', function () {",
+                  "    const body = pm.response.json();",
+                  "    const fields = body.details.map(d => d.field);",
+                  "    pm.expect(fields).to.include('name');",
+                  "    pm.expect(fields).to.include('price');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST /items — sem token (401)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"name\": \"Mouse Gamer\",\n    \"price\": 199.90\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/items",
+              "host": ["{{baseUrl}}"],
+              "path": ["items"]
+            },
+            "description": "EXERCÍCIO: Tenta criar item sem enviar o header Authorization. Deve retornar 401."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 401 sem token', function () {",
+                  "    pm.response.to.have.status(401);",
+                  "});",
+                  "",
+                  "pm.test('Body indica ausência de autenticação', function () {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.error).to.equal('Unauthorized');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /items — listar com paginação",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/items?page=1&limit=5",
+              "host": ["{{baseUrl}}"],
+              "path": ["items"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "5"
+                }
+              ]
+            },
+            "description": "Lista items com paginação. Parâmetros: page, limit."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Body tem data (array) e pagination', function () {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.data).to.be.an('array');",
+                  "    pm.expect(body.pagination).to.be.an('object');",
+                  "    pm.expect(body.pagination.page).to.be.a('number');",
+                  "    pm.expect(body.pagination.limit).to.be.a('number');",
+                  "    pm.expect(body.pagination.total).to.be.a('number');",
+                  "    pm.expect(body.pagination.totalPages).to.be.a('number');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /items — filtro com ?q=",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/items?q=teclado",
+              "host": ["{{baseUrl}}"],
+              "path": ["items"],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "teclado"
+                }
+              ]
+            },
+            "description": "Lista items filtrando por texto no nome ou descrição."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Retorna lista filtrada', function () {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.data).to.be.an('array');",
+                  "    // Todos resultados devem conter 'teclado' no nome ou descrição",
+                  "    body.data.forEach(item => {",
+                  "        const matches = item.name.toLowerCase().includes('teclado') ||",
+                  "            (item.description && item.description.toLowerCase().includes('teclado'));",
+                  "        pm.expect(matches, `Item '${item.name}' não corresponde ao filtro`).to.be.true;",
+                  "    });",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /items/:id — buscar item existente",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/items/{{itemId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["items", "{{itemId}}"]
+            },
+            "description": "Busca item pelo id salvo na variável 'itemId'."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Body tem o id correto', function () {",
+                  "    const body = pm.response.json();",
+                  "    const expectedId = parseInt(pm.environment.get('itemId'));",
+                  "    pm.expect(body.id).to.equal(expectedId);",
+                  "    pm.expect(body.name).to.be.a('string');",
+                  "    pm.expect(body.version).to.be.a('number');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /items/:id — item não existe (404)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/items/99999",
+              "host": ["{{baseUrl}}"],
+              "path": ["items", "99999"]
+            },
+            "description": "EXERCÍCIO: Tenta buscar item com id que não existe. Deve retornar 404."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 404 Not Found', function () {",
+                  "    pm.response.to.have.status(404);",
+                  "});",
+                  "",
+                  "pm.test('Body tem error NotFound', function () {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.error).to.equal('NotFound');",
+                  "    pm.expect(body.message).to.be.a('string');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "PATCH /items/:id — atualizar item",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"price\": 449.90,\n    \"description\": \"Atualizado via PATCH — promoção!\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/items/{{itemId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["items", "{{itemId}}"]
+            },
+            "description": "Atualiza campos de um item existente. Incrementa a versão."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Versão foi incrementada', function () {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.version).to.be.above(1);",
+                  "    pm.expect(body.price).to.equal(449.90);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "PATCH /items/:id — conflito de versão com If-Match (409)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "If-Match",
+                "value": "1",
+                "description": "Versão desatualizada — provoca conflito 409"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"price\": 399.90\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/items/{{itemId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["items", "{{itemId}}"]
+            },
+            "description": "EXERCÍCIO: Envia If-Match com versão desatualizada. Deve retornar 409 Conflict."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 409 Conflict', function () {",
+                  "    pm.response.to.have.status(409);",
+                  "});",
+                  "",
+                  "pm.test('Body indica conflito de versão', function () {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.error).to.equal('Conflict');",
+                  "    pm.expect(body.currentVersion).to.be.a('number');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "DELETE /items/:id — deletar item",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/items/{{itemId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["items", "{{itemId}}"]
+            },
+            "description": "Deleta um item. Retorna 204 No Content."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 204 No Content', function () {",
+                  "    pm.response.to.have.status(204);",
+                  "});",
+                  "",
+                  "pm.test('Body vazio no 204', function () {",
+                  "    pm.expect(pm.response.text()).to.equal('');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /items/:id — após deletar (404)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/items/{{itemId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["items", "{{itemId}}"]
+            },
+            "description": "Confirma que o item foi deletado — deve retornar 404."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 404 após DELETE', function () {",
+                  "    pm.response.to.have.status(404);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "04 - Errors e Edge Cases",
+      "item": [
+        {
+          "name": "GET /rate-limit — aciona rate limit (429)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/rate-limit",
+              "host": ["{{baseUrl}}"],
+              "path": ["rate-limit"]
+            },
+            "description": "EXERCÍCIO: Execute este request 4+ vezes em menos de 10 segundos para provocar 429. Observe os headers RateLimit-*."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Aceita 200 (dentro do limite) ou 429 (limite excedido)",
+                  "pm.test('Status 200 ou 429', function () {",
+                  "    pm.expect([200, 429]).to.include(pm.response.code);",
+                  "});",
+                  "",
+                  "if (pm.response.code === 429) {",
+                  "    pm.test('Headers de rate limit presentes no 429', function () {",
+                  "        pm.expect(pm.response.headers.get('RateLimit-Limit') ||",
+                  "                  pm.response.headers.get('X-RateLimit-Limit')).to.not.be.undefined;",
+                  "    });",
+                  "    console.log('Rate limit atingido! Headers:', JSON.stringify({",
+                  "        limit: pm.response.headers.get('RateLimit-Limit'),",
+                  "        remaining: pm.response.headers.get('RateLimit-Remaining'),",
+                  "        reset: pm.response.headers.get('RateLimit-Reset')",
+                  "    }));",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /server-error — erro 500",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/server-error",
+              "host": ["{{baseUrl}}"],
+              "path": ["server-error"]
+            },
+            "description": "EXERCÍCIO: Este endpoint sempre retorna 500. Observe o corpo padronizado do erro."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 500 Internal Server Error', function () {",
+                  "    pm.response.to.have.status(500);",
+                  "});",
+                  "",
+                  "pm.test('Body tem error, message, requestId e timestamp', function () {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.error).to.equal('InternalServerError');",
+                  "    pm.expect(body.message).to.be.a('string');",
+                  "    pm.expect(body.requestId).to.be.a('string');",
+                  "    pm.expect(body.timestamp).to.be.a('string');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /timeout — resposta lenta (treinar timeout)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/timeout?delay=3000",
+              "host": ["{{baseUrl}}"],
+              "path": ["timeout"],
+              "query": [
+                {
+                  "key": "delay",
+                  "value": "3000",
+                  "description": "Delay em ms. Aumente para 7000+ para simular timeout real."
+                }
+              ]
+            },
+            "description": "EXERCÍCIO: Endpoint com delay proposital. Ajuste o parâmetro 'delay' e configure o Timeout do Postman em Settings para ver o comportamento."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200 (resposta lenta mas completa)', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Tempo de resposta maior que 2500ms', function () {",
+                  "    pm.expect(pm.response.responseTime).to.be.above(2500);",
+                  "});",
+                  "",
+                  "pm.test('Body tem mensagem', function () {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.message).to.include('ms');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /rota-inexistente — 404 de rota",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/rota-inexistente",
+              "host": ["{{baseUrl}}"],
+              "path": ["rota-inexistente"]
+            },
+            "description": "EXERCÍCIO: Testa 404 para rota que não existe na API."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 404 para rota inexistente', function () {",
+                  "    pm.response.to.have.status(404);",
+                  "});",
+                  "",
+                  "pm.test('Body tem error NotFound', function () {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.error).to.equal('NotFound');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
