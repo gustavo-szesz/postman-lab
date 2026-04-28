@@ -323,7 +323,9 @@ app.get('/rate-limit', rateLimitEndpointLimiter, (req, res) => {
 
 // GET /timeout  — demora 7 segundos propositalmente
 app.get('/timeout', (req, res) => {
-  const delay = parseInt(req.query.delay || '7000', 10);
+  const MAX_DELAY = 30000;
+  const requestedDelay = parseInt(req.query.delay || '7000', 10);
+  const delay = isNaN(requestedDelay) || requestedDelay < 0 ? 7000 : Math.min(requestedDelay, MAX_DELAY);
   setTimeout(() => {
     res.status(200).json({
       message: `Resposta chegou depois de ${delay}ms.`,
@@ -368,7 +370,6 @@ app.use((err, req, res, next) => {
 
 app.listen(PORT, () => {
   console.log(`[postman-lab] API rodando em http://localhost:${PORT}`);
-  console.log(`[postman-lab] JWT_SECRET: ${JWT_SECRET}`);
 });
 
 module.exports = app;
